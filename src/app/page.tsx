@@ -1,6 +1,8 @@
+'use client';
+
+import { useState } from 'react';
 import Link from 'next/link';
 import config from '@/config';
-import { getPaymentUrl } from '@/config';
 
 // 产品配置从config中获取
 const products = [
@@ -19,6 +21,51 @@ const products = [
 ];
 
 export default function Home() {
+  const [loading, setLoading] = useState<{ [key: string]: boolean }>({});
+  const [error, setError] = useState<string | null>(null);
+  
+  // 创建结账会话
+  const createCheckout = async (productId: string) => {
+    setLoading(prev => ({ ...prev, [productId]: true }));
+    setError(null);
+    
+    try {
+      const requestId = `req_${Date.now()}`;
+      const userId = `user_${Date.now()}`;
+      
+      const response = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          product_id: productId,
+          request_id: requestId,
+          success_url: `${window.location.origin}/success`,
+          metadata: {
+            userId: userId,
+            orderId: `order_${Date.now()}`,
+            appSource: 'iuu_creem'
+          }
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok && data.success && data.checkout?.url) {
+        // 如果成功，重定向到结账URL
+        window.location.href = data.checkout.url;
+      } else {
+        setError(data.error || '创建结账会话失败');
+      }
+    } catch (err) {
+      console.error('结账错误:', err);
+      setError('请求出错: ' + String(err));
+    } finally {
+      setLoading(prev => ({ ...prev, [productId]: false }));
+    }
+  };
+
   return (
     <main className="flex min-h-screen flex-col items-center p-8 md:p-24 max-w-7xl mx-auto">
       <h1 className="text-4xl font-bold mb-8 text-center">Creem支付集成演示</h1>
@@ -31,7 +78,7 @@ export default function Home() {
         </span>
       </p>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-6xl">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-6xl">
         {products.map((product) => (
           <div 
             key={product.id} 
@@ -40,19 +87,43 @@ export default function Home() {
             <h2 className="text-2xl font-bold mb-2">{product.name}</h2>
             <div className="text-3xl font-bold text-blue-600 mb-4">${product.price} <span className="text-sm font-normal text-gray-500">USD</span></div>
             <p className="mb-6 text-gray-600 flex-grow">{product.description}</p>
-            <a 
-              href={getPaymentUrl(product.id)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="bg-blue-500 hover:bg-blue-600 text-white py-3 px-6 rounded-lg font-medium text-center transition-colors"
+            <button 
+              onClick={() => createCheckout(product.id)}
+              disabled={loading[product.id]}
+              className={`${
+                loading[product.id] ? 'bg-gray-400' : 'bg-blue-500 hover:bg-blue-600'
+              } text-white py-3 px-6 rounded-lg font-medium text-center transition-colors`}
             >
-              选择此套餐
-            </a>
+              {loading[product.id] ? '处理中...' : '立即购买'}
+            </button>
           </div>
         ))}
       </div>
 
+      {error && (
+        <div className="mt-8 p-4 bg-red-50 border border-red-200 rounded-lg text-red-600 w-full max-w-3xl">
+          <h3 className="font-bold mb-2">错误</h3>
+          <p>{error}</p>
+        </div>
+      )}
+
       <div className="mt-16 p-6 bg-gray-50 rounded-lg max-w-3xl w-full">
+        <h2 className="text-2xl font-bold mb-4">标准集成说明</h2>
+        <p className="mb-4 text-gray-600">
+          当点击"立即购买"时，我们会：
+        </p>
+        <ol className="list-decimal pl-6 mb-4 space-y-2 text-gray-600">
+          <li>通过服务器API调用Creem创建结账会话</li>
+          <li>生成唯一的request_id用于跟踪交易</li>
+          <li>传递元数据（如用户ID）</li>
+          <li>设置成功页面跳转地址</li>
+          <li>重定向用户到Creem结账页面</li>
+          <li>支付成功后，用户将被重定向回我们的成功页面</li>
+          <li>同时，Creem会发送webhook通知，我们将数据存入数据库</li>
+        </ol>
+      </div>
+
+      <div className="mt-8 p-6 bg-gray-50 rounded-lg max-w-3xl w-full">
         <h2 className="text-2xl font-bold mb-4">测试说明</h2>
         <p className="mb-4">
           这是一个{config.creem.testMode ? <strong>测试集成</strong> : <strong>生产集成</strong>}，使用Creem支付系统。
@@ -76,8 +147,8 @@ export default function Home() {
         <Link href="/payments" className="text-blue-500 hover:underline mr-4">
           查看支付记录
         </Link>
-        <Link href="/checkout-test" className="text-blue-500 hover:underline">
-          测试结账流程
+        <Link href="/api/webhooks" className="text-blue-500 hover:underline" target="_blank">
+          查看Webhook端点
         </Link>
       </div>
     </main>
