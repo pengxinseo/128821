@@ -72,7 +72,7 @@ export async function insertPayment({
   status = 1, // 默认为成功
 }: {
   user_id: string;
-  plan_id: number;
+  plan_id: string | number; // 支持字符串或数字类型
   amount: number;
   payment_method?: string;
   transaction_id?: string;

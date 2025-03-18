@@ -33,7 +33,7 @@ async function insertTestPayment() {
     const [result] = await connection.execute(
       `INSERT INTO iuu_payment (user_id, plan_id, amount, payment_method, transaction_id, status) 
        VALUES (?, ?, ?, ?, ?, ?)`,
-      ['3', 5, 6.9, 'script_test', testOrderId, 1]
+      ['3', 'prod_test_' + orderIdTimestamp, 6.9, 'script_test', testOrderId, 1]
     );
     
     console.log('测试记录插入结果:', result);

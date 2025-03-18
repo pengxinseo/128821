@@ -1,11 +1,10 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
-// 创建一个单独的组件来使用 useSearchParams
-function PaymentDetails() {
+export default function SuccessPage() {
   const searchParams = useSearchParams();
   const [paymentDetails, setPaymentDetails] = useState<Record<string, string | null>>({});
   const [loading, setLoading] = useState(true);
@@ -27,34 +26,11 @@ function PaymentDetails() {
     
     // Log the payment success for tracking
     console.log('Payment Successful!', params);
+    
+    // In a real app, you might want to verify this payment with your backend
+    // or update the UI based on the payment status from your database
   }, [searchParams]);
-
-  return (
-    <>
-      {loading ? (
-        <div className="text-center py-4">Loading payment details...</div>
-      ) : (
-        <div className="bg-white p-4 rounded-lg shadow mb-6">
-          <h2 className="text-xl font-semibold mb-3">Payment Details</h2>
-          {Object.entries(paymentDetails)
-            .filter(([_, value]) => value !== null)
-            .map(([key, value]) => (
-              <li key={key} className="mb-2 list-none">
-                <span className="font-medium">{key}:</span> {value}
-              </li>
-            ))}
-        </div>
-      )}
-    </>
-  );
-}
-
-// 加载状态的回退UI
-function PaymentDetailsFallback() {
-  return <div className="text-center py-4">Loading payment information...</div>;
-}
-
-export default function SuccessPage() {
+  
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-24">
       <div className="bg-green-100 border border-green-300 rounded-lg p-8 max-w-2xl w-full text-center">
@@ -67,9 +43,20 @@ export default function SuccessPage() {
         <h1 className="text-3xl font-bold text-green-600 mb-3">Payment Successful!</h1>
         <p className="text-lg mb-6">Thank you for your purchase. Your transaction has been completed.</p>
         
-        <Suspense fallback={<PaymentDetailsFallback />}>
-          <PaymentDetails />
-        </Suspense>
+        {loading ? (
+          <div className="text-center py-4">Loading payment details...</div>
+        ) : (
+          <div className="bg-white p-4 rounded-lg shadow mb-6">
+            <h2 className="text-xl font-semibold mb-3">Payment Details</h2>
+            {Object.entries(paymentDetails)
+              .filter(([_, value]) => value !== null)
+              .map(([key, value]) => (
+                <li key={key} className="mb-2 list-none">
+                  <span className="font-medium">{key}:</span> {value}
+                </li>
+              ))}
+          </div>
+        )}
         
         <div className="space-y-3 mb-6">
           <p className="text-gray-700">
