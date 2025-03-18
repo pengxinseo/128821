@@ -110,7 +110,7 @@ export default function Home() {
       <div className="mt-16 p-6 bg-gray-50 rounded-lg max-w-3xl w-full">
         <h2 className="text-2xl font-bold mb-4">标准集成说明</h2>
         <p className="mb-4 text-gray-600">
-          当点击"立即购买"时，我们会：
+          当点击&quot;立即购买&quot;时，我们会：
         </p>
         <ol className="list-decimal pl-6 mb-4 space-y-2 text-gray-600">
           <li>通过服务器API调用Creem创建结账会话</li>
