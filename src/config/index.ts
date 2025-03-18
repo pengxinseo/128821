@@ -2,8 +2,8 @@
 const config = {
   // Creem API配置
   creem: {
-    apiKey: process.env.CREEM_API_KEY || 'your_creem_api_key_here',
-    secretKey: process.env.CREEM_SECRET_KEY || 'your_creem_secret_key_here',
+    apiKey: process.env.CREEM_API_KEY || 'creem_test_2ZfiQdu1w6C29pbWZbmxki',
+    secretKey: process.env.CREEM_SECRET_KEY || 'whsec_7ZEElvFDehBMvfrtiQ8wUv',
     testMode: process.env.CREEM_TEST_MODE === 'true',
     products: {
       basic: {

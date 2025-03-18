@@ -73,8 +73,11 @@ export default function Home() {
       </div>
 
       <div className="mt-8">
-        <Link href="/payments" className="text-blue-500 hover:underline">
+        <Link href="/payments" className="text-blue-500 hover:underline mr-4">
           查看支付记录
+        </Link>
+        <Link href="/checkout-test" className="text-blue-500 hover:underline">
+          测试结账流程
         </Link>
       </div>
     </main>
