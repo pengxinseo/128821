@@ -1,11 +1,12 @@
 import mysql from 'mysql2/promise';
+import config from '@/config';
 
 // 数据库连接配置
 const dbConfig = {
-  host: process.env.MYSQL_HOST || '121.40.216.79',
-  user: process.env.MYSQL_USER || 'iuu',
-  password: process.env.MYSQL_PASSWORD || 'iuu',
-  database: process.env.MYSQL_DATABASE || 'iuu',
+  host: config.database.host,
+  user: config.database.user,
+  password: config.database.password,
+  database: config.database.database,
   // 添加连接配置，提高稳定性
   waitForConnections: true,
   connectionLimit: 10,

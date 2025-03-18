@@ -1,43 +1,81 @@
-import PricingPlan from '@/components/PricingPlan';
 import Link from 'next/link';
+import config from '@/config';
+import { getPaymentUrl } from '@/config';
+
+// 产品配置从config中获取
+const products = [
+  {
+    id: config.creem.products.basic.id,
+    name: '基础套餐',
+    price: config.creem.products.basic.price,
+    description: '基础功能，适合个人用户'
+  },
+  {
+    id: config.creem.products.standard.id,
+    name: '标准套餐',
+    price: config.creem.products.standard.price,
+    description: '标准功能，适合小型团队'
+  }
+];
 
 export default function Home() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-8 md:p-24">
-      <div className="w-full max-w-5xl">
-        <h1 className="text-4xl font-bold text-center mb-2">Creem Payment Demo</h1>
-        <div className="text-center mb-4">
-          <span className="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded text-sm font-medium">
-            Test Mode
-          </span>
-        </div>
-        <p className="text-center text-gray-600 mb-4">
-          This demo uses real Creem test API integration with webhooks
-        </p>
-        <p className="text-center text-gray-500 mb-6 text-sm">
-          API Key: creem_test_2ZfiQdu1w6C29pbWZbmxki | Webhook URL: https://128821.vercel.app/api/webhooks
-        </p>
-        
-        <div className="flex justify-center">
-          <PricingPlan />
-        </div>
-        
-        <div className="mt-12 text-center">
-          <Link 
-            href="/payments" 
-            className="inline-block bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded transition-colors"
+    <main className="flex min-h-screen flex-col items-center p-8 md:p-24 max-w-7xl mx-auto">
+      <h1 className="text-4xl font-bold mb-8 text-center">Creem支付集成演示</h1>
+      
+      <p className="text-lg mb-12 text-center max-w-3xl">
+        这是一个使用Creem支付系统的演示应用。您可以选择以下任意套餐进行测试支付。
+        <br />
+        <span className="text-blue-500 font-semibold">
+          注意：{config.creem.testMode ? '这是测试环境，不会产生实际费用。' : '这是正式环境，将产生实际交易。'}
+        </span>
+      </p>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-6xl">
+        {products.map((product) => (
+          <div 
+            key={product.id} 
+            className="border rounded-lg p-6 flex flex-col h-full shadow-md hover:shadow-lg transition-shadow"
           >
-            查看支付记录
-          </Link>
-        </div>
-        
-        <div className="mt-6 text-center text-sm text-gray-500">
-          <p>Check the browser console to see payment status logs</p>
-          <p className="mt-2">
-            Upon successful payment, webhooks will be received at the webhook URL,
-            and payment details will be displayed on the success page.
-          </p>
-        </div>
+            <h2 className="text-2xl font-bold mb-2">{product.name}</h2>
+            <div className="text-3xl font-bold text-blue-600 mb-4">${product.price} <span className="text-sm font-normal text-gray-500">USD</span></div>
+            <p className="mb-6 text-gray-600 flex-grow">{product.description}</p>
+            <a 
+              href={getPaymentUrl(product.id)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-blue-500 hover:bg-blue-600 text-white py-3 px-6 rounded-lg font-medium text-center transition-colors"
+            >
+              选择此套餐
+            </a>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-16 p-6 bg-gray-50 rounded-lg max-w-3xl w-full">
+        <h2 className="text-2xl font-bold mb-4">测试说明</h2>
+        <p className="mb-4">
+          这是一个{config.creem.testMode ? <strong>测试集成</strong> : <strong>生产集成</strong>}，使用Creem支付系统。
+          {config.creem.testMode && (
+            <>测试环境中，您可以使用以下信息：</>
+          )}
+        </p>
+        {config.creem.testMode && (
+          <ul className="list-disc pl-6 mb-4 space-y-2">
+            <li>测试卡号: <code className="bg-gray-100 px-2 py-1 rounded">4242 4242 4242 4242</code></li>
+            <li>有效期: 任意未来日期</li>
+            <li>CVV: 任意3位数</li>
+          </ul>
+        )}
+        <p>
+          支付成功后，系统会将您重定向到成功页面，并记录交易信息。
+        </p>
+      </div>
+
+      <div className="mt-8">
+        <Link href="/payments" className="text-blue-500 hover:underline">
+          查看支付记录
+        </Link>
       </div>
     </main>
   );
