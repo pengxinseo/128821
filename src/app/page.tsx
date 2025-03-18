@@ -52,9 +52,9 @@ export default function Home() {
       
       const data = await response.json();
       
-      if (response.ok && data.success && data.checkout?.url) {
+      if (response.ok && data.success && data.checkout?.checkout_url) {
         // 如果成功，重定向到结账URL
-        window.location.href = data.checkout.url;
+        window.location.href = data.checkout.checkout_url;
       } else {
         setError(data.error || '创建结账会话失败');
       }
