@@ -1,7 +1,7 @@
 Get Started
 Standard Integration
 Learn how to receive payments on your application
-
+吃吃吃
 ​
 Prerequisites
 To get the most out of this guide, you’ll need to:
