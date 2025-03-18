@@ -3,9 +3,6 @@ import * as crypto from 'crypto';
 import { insertPayment, testConnection } from '@/lib/db';
 import config from '@/config';
 
-// Creem webhook secret for signature verification
-const WEBHOOK_SECRET = 'whsec_7ZEElvFDehBMvfrtiQ8wUv';
-
 // 添加 GET 方法支持用于测试端点
 export async function GET(request: Request) {
   console.log('GET 请求收到: 测试 webhook 端点');
@@ -34,16 +31,43 @@ export async function GET(request: Request) {
   }
 }
 
-// 验证签名
+// 正确验证Creem的签名
 function verifySignature(body: string, signature: string): boolean {
-  // 在实际应用中，您应该使用适当的签名验证机制
-  // 这里为演示简化，仅检查是否提供了签名
-  console.log('验证签名...', { 
-    signature, 
-    secretKey: config.creem.secretKey,
-    testMode: config.creem.testMode 
-  });
-  return !!signature;
+  try {
+    // 在测试模式下，暂时允许所有请求通过（便于调试）
+    if (config.creem.testMode) {
+      console.log('测试模式下跳过签名验证');
+      return true;
+    }
+
+    if (!signature) {
+      console.log('未提供签名');
+      return false;
+    }
+
+    const secretKey = config.creem.secretKey;
+    if (!secretKey) {
+      console.log('未配置密钥，无法验证签名');
+      return false;
+    }
+
+    // 使用秘钥和请求体计算HMAC
+    const hmac = crypto.createHmac('sha256', secretKey);
+    hmac.update(body);
+    const computedSignature = hmac.digest('hex');
+    
+    console.log('签名验证:', {
+      headerSignature: signature,
+      computedSignature: computedSignature,
+      matched: computedSignature === signature
+    });
+    
+    return computedSignature === signature;
+  } catch (error) {
+    console.error('签名验证过程中出错:', error);
+    // 在测试环境中可以返回true便于调试
+    return config.creem.testMode;
+  }
 }
 
 // 处理 checkout.completed 事件
@@ -217,11 +241,30 @@ export async function POST(request: NextRequest) {
   try {
     // 获取请求数据
     const body = await request.text();
-    const signature = request.headers.get('x-creem-signature') || '';
     
-    // 验证签名
+    // 打印请求头，便于调试
+    const headers: Record<string, string> = {};
+    request.headers.forEach((value, key) => {
+      headers[key] = value;
+    });
+    console.log('收到Webhook请求头:', JSON.stringify(headers, null, 2));
+    
+    // Creem的签名可能在不同的头部字段中
+    const signature = request.headers.get('x-creem-signature') || 
+                       request.headers.get('creem-signature') || 
+                       request.headers.get('signature') || '';
+    
+    console.log('获取到的签名:', signature);
+    console.log('请求体前100个字符:', body.substring(0, 100));
+    
+    // 在调试模式下打印完整请求体
+    if (config.creem.testMode) {
+      console.log('完整请求体:', body);
+    }
+    
+    // 验证签名（测试模式下暂时允许所有请求）
     const isValidSignature = verifySignature(body, signature);
-    if (!isValidSignature) {
+    if (!isValidSignature && !config.creem.testMode) {
       console.error('签名验证失败');
       return new NextResponse(JSON.stringify({ error: '签名验证失败' }), {
         status: 401,
@@ -230,9 +273,27 @@ export async function POST(request: NextRequest) {
     }
     
     // 解析请求体
-    const event = JSON.parse(body);
+    let event;
+    try {
+      event = JSON.parse(body);
+    } catch (parseError) {
+      console.error('解析JSON失败:', parseError);
+      return new NextResponse(JSON.stringify({ error: '无效的JSON格式' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
     
-    console.log(`收到Creem Webhook事件: ${event.type}`);
+    console.log(`收到Creem Webhook事件:`, event.type || '未知事件类型');
+    
+    // 检查事件结构
+    if (!event || !event.type) {
+      console.log('收到的事件缺少类型信息:', event);
+      return new NextResponse(JSON.stringify({ received: true, warning: '事件格式不符合预期' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
     
     // 根据事件类型分发到不同的处理函数
     switch (event.type) {
@@ -240,24 +301,25 @@ export async function POST(request: NextRequest) {
         await handleCheckoutCompleted(event);
         break;
       case 'subscription.active':
-        // 处理订阅激活事件
-        console.log('订阅已激活!', event);
+        await handleSubscriptionActive(event);
         break;
       case 'subscription.paid':
-        // 处理订阅付款事件
-        console.log('订阅付款已收到!', event);
+        await handleSubscriptionPaid(event);
         break;
       default:
         console.log(`未处理的事件类型: ${event.type}`);
     }
     
-    return new NextResponse(JSON.stringify({ received: true }), {
+    return new NextResponse(JSON.stringify({ received: true, status: 'success' }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (error: any) {
     console.error('处理webhook时出错:', error);
-    return new NextResponse(JSON.stringify({ error: error.message }), {
+    return new NextResponse(JSON.stringify({ 
+      error: error.message,
+      stack: config.creem.testMode ? error.stack : undefined
+    }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
     });
