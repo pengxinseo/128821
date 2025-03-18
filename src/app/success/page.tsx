@@ -60,7 +60,7 @@ export default function SuccessPage() {
         
         <div className="space-y-3 mb-6">
           <p className="text-gray-700">
-            We've received your payment and your subscription is now active! You should receive a confirmation email shortly.
+            We&apos;ve received your payment and your subscription is now active! You should receive a confirmation email shortly.
           </p>
           <p className="text-gray-700">
             Thank you for choosing our service!
