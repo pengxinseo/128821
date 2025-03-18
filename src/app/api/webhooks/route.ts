@@ -8,27 +8,130 @@ export async function GET(request: Request) {
   console.log('GET 请求收到: 测试 webhook 端点');
   
   // 测试数据库连接
+  let dbStatus = '未知';
+  let dbMessage = '';
+  
   try {
     const connected = await testConnection();
     if (connected) {
-      return NextResponse.json({
-        status: 'ok',
-        message: 'Webhook 端点正常工作，数据库连接成功。请使用 POST 发送实际的 webhook 请求。'
-      });
+      dbStatus = '成功';
+      dbMessage = '数据库连接正常';
     } else {
-      return NextResponse.json({
-        status: 'warning',
-        message: 'Webhook 端点正常，但数据库连接失败！'
-      }, { status: 200 });
+      dbStatus = '失败';
+      dbMessage = '数据库连接失败，但端点正常';
     }
   } catch (error) {
-    console.error('测试数据库连接时出错:', error);
-    return NextResponse.json({
-      status: 'error',
-      message: 'Webhook 端点正常，但数据库测试失败！',
-      error: String(error)
-    }, { status: 200 });
+    dbStatus = '错误';
+    dbMessage = `数据库测试出错: ${error instanceof Error ? error.message : String(error)}`;
   }
+  
+  // 获取配置状态
+  const configStatus = {
+    testMode: config.creem.testMode ? '开启' : '关闭',
+    secretKeyConfigured: !!config.creem.secretKey ? '已配置' : '未配置',
+    database: config.database.host,
+  };
+  
+  // 构建HTML响应
+  const html = `
+  <!DOCTYPE html>
+  <html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Creem Webhook 测试页面</title>
+    <style>
+      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; padding: 2rem; max-width: 800px; margin: 0 auto; color: #333; }
+      h1 { color: #2563eb; }
+      .card { background: #f9fafb; border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; border: 1px solid #e5e7eb; }
+      .success { color: #047857; background: #ecfdf5; }
+      .warning { color: #92400e; background: #fffbeb; }
+      .error { color: #b91c1c; background: #fee2e2; }
+      .code { font-family: monospace; background: #f3f4f6; padding: 0.2rem 0.4rem; border-radius: 4px; }
+      table { width: 100%; border-collapse: collapse; }
+      td, th { padding: 0.5rem; text-align: left; border-bottom: 1px solid #e5e7eb; }
+      th { font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <h1>Creem Webhook 测试页面</h1>
+    
+    <div class="card ${dbStatus === '成功' ? 'success' : dbStatus === '失败' ? 'warning' : 'error'}">
+      <h2>端点状态</h2>
+      <p><strong>Webhook URL:</strong> ${request.url}</p>
+      <p><strong>数据库连接:</strong> ${dbStatus}</p>
+      <p>${dbMessage}</p>
+    </div>
+    
+    <div class="card">
+      <h2>配置信息</h2>
+      <table>
+        <tr>
+          <th>测试模式</th>
+          <td>${configStatus.testMode}</td>
+        </tr>
+        <tr>
+          <th>密钥配置</th>
+          <td>${configStatus.secretKeyConfigured}</td>
+        </tr>
+        <tr>
+          <th>数据库主机</th>
+          <td>${configStatus.database}</td>
+        </tr>
+      </table>
+    </div>
+    
+    <div class="card">
+      <h2>如何使用</h2>
+      <p>这个端点用于接收来自Creem的webhook事件通知。</p>
+      <p>您应该在Creem管理后台配置以下webhook URL:</p>
+      <p class="code">${request.url}</p>
+      <p>支持的事件类型:</p>
+      <ul>
+        <li><strong>checkout.completed</strong> - 支付完成事件</li>
+        <li><strong>subscription.active</strong> - 订阅激活事件</li>
+        <li><strong>subscription.paid</strong> - 订阅付款事件</li>
+      </ul>
+    </div>
+    
+    <div class="card">
+      <h2>手动测试</h2>
+      <p>您可以使用以下cURL命令发送测试webhook:</p>
+      <pre class="code">curl -X POST "${request.url}" \\
+  -H "Content-Type: application/json" \\
+  -H "creem-signature: test_signature" \\
+  -d '{
+    "id": "evt_test",
+    "eventType": "checkout.completed",
+    "created_at": ${Date.now()},
+    "object": {
+      "id": "ch_test",
+      "object": "checkout",
+      "product": {
+        "id": "prod_5o4cv1dxKuW50AclR6TJI0",
+        "price": 490
+      },
+      "customer": {
+        "id": "cust_test"
+      },
+      "order": {
+        "id": "ord_test",
+        "amount": 490
+      },
+      "status": "completed",
+      "mode": "test"
+    }
+  }'</pre>
+    </div>
+  </body>
+  </html>
+  `;
+  
+  return new Response(html, {
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+    },
+  });
 }
 
 // 正确验证Creem的签名
@@ -74,22 +177,21 @@ function verifySignature(body: string, signature: string): boolean {
 async function handleCheckoutCompleted(event: any) {
   try {
     console.log('支付成功! 详细信息:', JSON.stringify({
-      checkoutId: event.object.id,
-      customerId: event.object.customer?.id,
-      productId: event.object.product?.id,
-      amount: event.object.amount || event.object.order?.amount,
-      metadata: event.object.metadata
+      eventId: event.id,
+      checkoutId: event.object?.id,
+      orderId: event.object?.order?.id,
+      customerId: event.object?.customer?.id,
+      productId: event.object?.product?.id,
+      amount: event.object?.order?.amount || event.object?.product?.price,
     }, null, 2));
     
     // 从事件中提取需要的数据
     let amount = 6.9; // 默认金额
     
-    // 尝试从不同位置获取金额
-    if (event.object.amount) {
-      amount = parseFloat(event.object.amount) / 100;
-    } else if (event.object.order && event.object.order.amount) {
+    // 从订单或产品中获取金额
+    if (event.object?.order?.amount) {
       amount = parseFloat(event.object.order.amount) / 100;
-    } else if (event.object.product && event.object.product.price) {
+    } else if (event.object?.product?.price) {
       amount = parseFloat(event.object.product.price) / 100;
     }
     
@@ -97,29 +199,35 @@ async function handleCheckoutCompleted(event: any) {
     
     // 获取产品ID - 直接使用完整的productId字符串
     let productId = 'unknown'; // 默认产品ID
-    if (event.object.product && event.object.product.id) {
+    if (event.object?.product?.id) {
       productId = event.object.product.id; // 直接使用完整的productId
+    } else if (event.object?.order?.product) {
+      productId = event.object.order.product;
     }
     
     console.log(`使用的产品ID: ${productId}`);
     
-    // 获取交易ID - 优先使用元数据中的订单ID
+    // 获取交易ID - 优先使用订单ID
     let transactionId = '';
-    if (event.object.metadata && event.object.metadata.orderId) {
-      transactionId = event.object.metadata.orderId;
+    if (event.object?.order?.id) {
+      transactionId = event.object.order.id;
     } else {
-      transactionId = event.object.id || event.id;
+      transactionId = event.object?.id || event.id || `order_${Date.now()}`;
     }
+    
+    console.log(`使用的交易ID: ${transactionId}`);
     
     // 获取用户ID
     let userId = '3'; // 默认用户ID
     
-    // 尝试从元数据获取用户ID
-    if (event.object.metadata && event.object.metadata.userId) {
-      userId = event.object.metadata.userId;
-    } else if (event.object.customer && event.object.customer.id) {
+    // 从客户信息获取用户ID
+    if (event.object?.customer?.id) {
       userId = event.object.customer.id;
+    } else if (event.object?.order?.customer) {
+      userId = event.object.order.customer;
     }
+    
+    console.log(`使用的用户ID: ${userId}`);
     
     // 插入支付记录到数据库
     try {
@@ -146,44 +254,51 @@ async function handleCheckoutCompleted(event: any) {
 // 处理 subscription.active 事件
 async function handleSubscriptionActive(event: any) {
   try {
-    console.log('订阅已激活!', {
-      subscriptionId: event.object.id,
-      customerId: event.object.customer?.id,
-      productId: event.object.product?.id,
-      metadata: event.object.metadata
-    });
+    console.log('订阅已激活! 详细信息:', JSON.stringify({
+      eventId: event.id,
+      subscriptionId: event.object?.id,
+      customerId: event.object?.customer?.id,
+      productId: event.object?.product?.id,
+    }, null, 2));
     
     // 从事件中提取数据
     let productId = 'unknown'; // 默认产品ID
-    if (event.object.product && event.object.product.id) {
+    if (event.object?.product?.id) {
       productId = event.object.product.id; // 直接使用完整的productId
     }
     
-    const transactionId = event.object.id || event.id;
+    const transactionId = event.object?.id || event.id || `sub_${Date.now()}`;
     let userId = '3'; // 默认用户ID
     let amount = 6.9; // 默认金额
     
-    // 如果有元数据，尝试从中提取用户ID
-    if (event.object.metadata && event.object.metadata.userId) {
-      userId = event.object.metadata.userId;
+    // 从客户信息获取用户ID
+    if (event.object?.customer?.id) {
+      userId = event.object.customer.id;
     }
     
     // 如果能获取到产品价格，使用产品价格
-    if (event.object.product && event.object.product.price) {
+    if (event.object?.product?.price) {
       amount = parseFloat(event.object.product.price) / 100;
     }
     
-    // 插入支付记录到数据库
-    await insertPayment({
-      user_id: userId,
-      plan_id: productId, // 使用完整的productId作为plan_id
-      amount: amount,
-      payment_method: 'creem_subscription',
-      transaction_id: transactionId,
-      status: 1, // 成功
-    });
+    console.log(`订阅信息: 用户ID=${userId}, 产品ID=${productId}, 金额=${amount}, 交易ID=${transactionId}`);
     
-    console.log(`订阅记录已成功添加到数据库，用户ID: ${userId}, 产品ID: ${productId}`);
+    // 插入支付记录到数据库
+    try {
+      const result = await insertPayment({
+        user_id: userId,
+        plan_id: productId, // 使用完整的productId作为plan_id
+        amount: amount,
+        payment_method: 'creem_subscription',
+        transaction_id: transactionId,
+        status: 1, // 成功
+      });
+      
+      console.log(`订阅记录已成功添加到数据库，用户ID: ${userId}, 产品ID: ${productId}, 结果:`, result);
+    } catch (dbError) {
+      console.error('插入订阅记录时出错:', dbError);
+      throw dbError;
+    }
   } catch (error) {
     console.error('处理订阅激活事件时出错:', error);
     throw error;
@@ -193,44 +308,54 @@ async function handleSubscriptionActive(event: any) {
 // 处理 subscription.paid 事件
 async function handleSubscriptionPaid(event: any) {
   try {
-    console.log('订阅付款已收到!', {
-      subscriptionId: event.object.id,
-      customerId: event.object.customer?.id,
-      productId: event.object.product?.id,
-      metadata: event.object.metadata
-    });
+    console.log('订阅付款已收到! 详细信息:', JSON.stringify({
+      eventId: event.id,
+      subscriptionId: event.object?.id,
+      customerId: event.object?.customer?.id,
+      productId: event.object?.product?.id,
+      amount: event.object?.amount || event.object?.product?.price
+    }, null, 2));
     
     // 从事件中提取数据
     let productId = 'unknown'; // 默认产品ID
-    if (event.object.product && event.object.product.id) {
+    if (event.object?.product?.id) {
       productId = event.object.product.id; // 直接使用完整的productId
     }
     
-    const transactionId = `${event.object.id}_${Date.now()}` || event.id;
+    const transactionId = `${event.object?.id || event.id}_${Date.now()}`;
     let userId = '3'; // 默认用户ID
     let amount = 6.9; // 默认金额
     
-    // 如果有元数据，尝试从中提取用户ID
-    if (event.object.metadata && event.object.metadata.userId) {
-      userId = event.object.metadata.userId;
+    // 从客户信息获取用户ID
+    if (event.object?.customer?.id) {
+      userId = event.object.customer.id;
     }
     
     // 如果能获取到产品价格，使用产品价格
-    if (event.object.product && event.object.product.price) {
+    if (event.object?.product?.price) {
       amount = parseFloat(event.object.product.price) / 100;
+    } else if (event.object?.amount) {
+      amount = parseFloat(event.object.amount) / 100;
     }
     
-    // 插入支付记录到数据库
-    await insertPayment({
-      user_id: userId,
-      plan_id: productId, // 使用完整的productId作为plan_id
-      amount: amount,
-      payment_method: 'creem_subscription_renewal',
-      transaction_id: transactionId,
-      status: 1, // 成功
-    });
+    console.log(`订阅付款信息: 用户ID=${userId}, 产品ID=${productId}, 金额=${amount}, 交易ID=${transactionId}`);
     
-    console.log(`订阅续费记录已成功添加到数据库，用户ID: ${userId}, 产品ID: ${productId}`);
+    // 插入支付记录到数据库
+    try {
+      const result = await insertPayment({
+        user_id: userId,
+        plan_id: productId, // 使用完整的productId作为plan_id
+        amount: amount,
+        payment_method: 'creem_subscription_renewal',
+        transaction_id: transactionId,
+        status: 1, // 成功
+      });
+      
+      console.log(`订阅续费记录已成功添加到数据库，用户ID: ${userId}, 产品ID: ${productId}, 结果:`, result);
+    } catch (dbError) {
+      console.error('插入订阅续费记录时出错:', dbError);
+      throw dbError;
+    }
   } catch (error) {
     console.error('处理订阅付款事件时出错:', error);
     throw error;
@@ -284,10 +409,12 @@ export async function POST(request: NextRequest) {
       });
     }
     
-    console.log(`收到Creem Webhook事件:`, event.type || '未知事件类型');
+    // Creem使用eventType字段而不是type字段
+    const eventType = event.eventType || event.type || null;
+    console.log(`收到Creem Webhook事件: ${eventType || '未知事件类型'}`);
     
     // 检查事件结构
-    if (!event || !event.type) {
+    if (!eventType) {
       console.log('收到的事件缺少类型信息:', event);
       return new NextResponse(JSON.stringify({ received: true, warning: '事件格式不符合预期' }), {
         status: 200,
@@ -296,7 +423,7 @@ export async function POST(request: NextRequest) {
     }
     
     // 根据事件类型分发到不同的处理函数
-    switch (event.type) {
+    switch (eventType) {
       case 'checkout.completed':
         await handleCheckoutCompleted(event);
         break;
@@ -307,7 +434,7 @@ export async function POST(request: NextRequest) {
         await handleSubscriptionPaid(event);
         break;
       default:
-        console.log(`未处理的事件类型: ${event.type}`);
+        console.log(`未处理的事件类型: ${eventType}`);
     }
     
     return new NextResponse(JSON.stringify({ received: true, status: 'success' }), {
