@@ -131,9 +131,101 @@ export async function debugQuery(sql: string) {
   }
 }
 
+// 更新用户会员等级
+export async function updateUserMembershipLevel(
+  userId: string, 
+  planId: string
+) {
+  let connection;
+  try {
+    // 确定会员等级
+    let membershipLevel = 0;
+    if (planId === 'prod_5o4cv1dxKuW50AclR6TJI0') {
+      membershipLevel = 1; // 基本会员
+    } else if (planId === 'prod_3xcabwSF8FhPyZFr4D94rQ') {
+      membershipLevel = 2; // 高级会员
+    }
+    
+    // 获取连接
+    connection = await pool.getConnection();
+    
+    const sql = `
+      UPDATE iuu_user 
+      SET membership_level = ? 
+      WHERE id = ?
+    `;
+    
+    const params = [membershipLevel, userId];
+    
+    console.log('执行更新用户会员等级SQL:', sql);
+    console.log('参数:', params);
+    
+    // 执行更新
+    const [result] = await connection.execute(sql, params);
+    console.log('用户会员等级更新成功:', result);
+    
+    return result;
+  } catch (error) {
+    console.error('用户会员等级更新失败:', error);
+    throw error;
+  } finally {
+    if (connection) {
+      connection.release();
+    }
+  }
+}
+
+// 添加用户订阅记录
+export async function insertUserSubscription(
+  userId: string,
+  planId: string | number
+) {
+  let connection;
+  try {
+    // 计算开始日期（今天）和结束日期（一个月后）
+    const startDate = new Date();
+    const endDate = new Date();
+    endDate.setMonth(endDate.getMonth() + 1);
+    
+    // 获取连接
+    connection = await pool.getConnection();
+    
+    const sql = `
+      INSERT INTO iuu_user_subscription 
+      (user_id, plan_id, start_date, end_date, status) 
+      VALUES (?, ?, ?, ?, 1)
+    `;
+    
+    const params = [
+      userId, 
+      planId, 
+      startDate.toISOString().slice(0, 19).replace('T', ' '), 
+      endDate.toISOString().slice(0, 19).replace('T', ' ')
+    ];
+    
+    console.log('执行插入用户订阅记录SQL:', sql);
+    console.log('参数:', params);
+    
+    // 执行插入
+    const [result] = await connection.execute(sql, params);
+    console.log('用户订阅记录插入成功:', result);
+    
+    return result;
+  } catch (error) {
+    console.error('用户订阅记录插入失败:', error);
+    throw error;
+  } finally {
+    if (connection) {
+      connection.release();
+    }
+  }
+}
+
 export default {
   query,
   testConnection,
   insertPayment,
-  debugQuery
+  debugQuery,
+  updateUserMembershipLevel,
+  insertUserSubscription
 }; 

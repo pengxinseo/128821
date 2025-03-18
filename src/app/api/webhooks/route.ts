@@ -1,6 +1,6 @@
 import { NextResponse, NextRequest } from 'next/server';
 import * as crypto from 'crypto';
-import { insertPayment, testConnection } from '@/lib/db';
+import { insertPayment, testConnection, updateUserMembershipLevel, insertUserSubscription } from '@/lib/db';
 import config from '@/config';
 
 // 添加 GET 方法支持用于测试端点
@@ -216,8 +216,12 @@ async function handleCheckoutCompleted(event: any) {
     // 获取用户ID
     let userId = '3'; // 默认用户ID
     
+    // 从元数据中获取用户ID
+    if (event.object?.metadata?.userId) {
+      userId = event.object.metadata.userId;
+    } 
     // 从客户信息获取用户ID
-    if (event.object?.customer?.id) {
+    else if (event.object?.customer?.id) {
       userId = event.object.customer.id;
     } else if (event.object?.order?.customer) {
       userId = event.object.order.customer;
@@ -237,6 +241,25 @@ async function handleCheckoutCompleted(event: any) {
       });
       
       console.log(`支付记录已成功添加到数据库，用户ID: ${userId}, 金额: ${amount}, 产品ID: ${productId}, 结果:`, result);
+      
+      // 1. 更新用户会员等级
+      try {
+        const updateResult = await updateUserMembershipLevel(userId, productId);
+        console.log(`用户会员等级已更新，用户ID: ${userId}, 产品ID: ${productId}, 结果:`, updateResult);
+      } catch (updateError) {
+        console.error('更新用户会员等级时出错:', updateError);
+        // 继续处理，不影响整体流程
+      }
+      
+      // 2. 添加用户订阅记录
+      try {
+        const subscriptionResult = await insertUserSubscription(userId, productId);
+        console.log(`用户订阅记录已添加，用户ID: ${userId}, 产品ID: ${productId}, 结果:`, subscriptionResult);
+      } catch (subscriptionError) {
+        console.error('添加用户订阅记录时出错:', subscriptionError);
+        // 继续处理，不影响整体流程
+      }
+      
     } catch (dbError) {
       console.error('插入支付记录时出错:', dbError);
       throw dbError;

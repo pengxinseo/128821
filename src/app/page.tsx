@@ -31,7 +31,7 @@ export default function Home() {
     
     try {
       const requestId = `req_${Date.now()}`;
-      const userId = `user_${Date.now()}`;
+      const userId = 3;
       
       const response = await fetch('/api/checkout', {
         method: 'POST',

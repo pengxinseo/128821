@@ -9,16 +9,11 @@ export async function POST(request: Request) {
     // 记录请求内容，便于调试
     console.log('收到结账请求:', body);
     
-    // 确保有用户ID
-    const userId = body.userId || '3';
-    
     // 从请求中提取元数据
     const metadata = body.metadata || {};
     
-    // 确保元数据中包含用户ID
-    if (!metadata.userId) {
-      metadata.userId = userId;
-    }
+    // 获取用户ID，优先使用metadata中的值
+    const userId = metadata.userId || body.userId || '3';
     
     // 生成唯一订单ID
     const orderId = body.orderId || `order_${Date.now()}`;
@@ -46,8 +41,8 @@ export async function POST(request: Request) {
       request_id: body.request_id || `req_${Date.now()}`,
       success_url: body.success_url || `${config.app.baseUrl}/success`,
       metadata: {
-        ...metadata,
-        userId: userId,
+        ...(body.metadata || {}), // 保留原始元数据
+        userId: userId, // 确保使用上面确定的userId
         orderId: orderId,
         appSource: 'iuu_creem'
       }
