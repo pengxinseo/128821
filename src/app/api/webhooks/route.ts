@@ -156,8 +156,15 @@ async function handleCheckoutCompleted(event: any) {
     
     console.log(`解析的产品ID: ${productId}`);
     
-    // 获取交易ID
-    const transactionId = event.object.id || event.id;
+    // 获取交易ID - 优先使用元数据中的订单ID
+    let transactionId = '';
+    if (event.object.metadata && event.object.metadata.orderId) {
+      transactionId = event.object.metadata.orderId;
+    } else {
+      transactionId = event.object.id || event.id;
+    }
+    
+    console.log(`使用的交易ID: ${transactionId}`);
     
     // 获取用户ID
     let userId = '3'; // 默认用户ID

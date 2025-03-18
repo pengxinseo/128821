@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { query, testConnection } from '@/lib/db';
+import { query, testConnection, debugQuery } from '@/lib/db';
 
 export async function GET(request: Request) {
   try {
@@ -16,18 +16,36 @@ export async function GET(request: Request) {
     
     console.log('数据库连接成功，正在查询支付记录...');
     
-    // 获取所有支付记录 - 修改为查询 iuu_payment 表
+    // 获取所有支付记录
     try {
-      const payments = await query(
-        'SELECT * FROM iuu_payment ORDER BY payment_date DESC'
-      );
+      // 先尝试调试查询，看看数据库是否可用
+      await debugQuery('SHOW TABLES');
       
-      console.log(`成功获取到 ${Array.isArray(payments) ? payments.length : 0} 条支付记录`);
-      console.log('支付记录示例:', Array.isArray(payments) && payments.length > 0 ? payments[0] : '无记录');
+      // 直接查询支付表
+      console.log('直接查询 iuu_payment 表...');
+      let payments = await query('SELECT * FROM iuu_payment', []);
+      
+      console.log(`查询结果: ${Array.isArray(payments) ? payments.length : 0} 条记录`);
+      
+      // 如果没有结果，尝试一次最简单的查询
+      if (Array.isArray(payments) && payments.length === 0) {
+        console.log('尝试简单查询: SELECT * FROM iuu_payment LIMIT 10');
+        payments = await query('SELECT * FROM iuu_payment LIMIT 10', []);
+      }
+      
+      // 记录详细的查询结果
+      if (Array.isArray(payments)) {
+        console.log(`查询返回 ${payments.length} 条记录`);
+        if (payments.length > 0) {
+          console.log('第一条记录:', JSON.stringify(payments[0]));
+        }
+      } else {
+        console.log('查询返回非数组结果:', payments);
+      }
       
       return NextResponse.json({ 
         success: true, 
-        data: payments 
+        data: payments || []
       });
     } catch (queryError) {
       console.error('SQL查询失败:', queryError);
