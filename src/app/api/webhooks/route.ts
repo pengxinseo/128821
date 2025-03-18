@@ -1,39 +1,80 @@
 import { NextResponse } from 'next/server';
 import * as crypto from 'crypto';
+import { insertPayment, testConnection } from '@/lib/db';
 
-// This is your webhook secret from Creem dashboard
-// In a real app, store this in environment variables
-const WEBHOOK_SECRET = 'your_webhook_secret';
+// Creem webhook secret for signature verification
+const WEBHOOK_SECRET = 'whsec_7ZEElvFDehBMvfrtiQ8wUv';
+
+// 添加 GET 方法支持用于测试端点
+export async function GET(request: Request) {
+  console.log('GET 请求收到: 测试 webhook 端点');
+  
+  // 测试数据库连接
+  try {
+    const connected = await testConnection();
+    if (connected) {
+      return NextResponse.json({
+        status: 'ok',
+        message: 'Webhook 端点正常工作，数据库连接成功。请使用 POST 发送实际的 webhook 请求。'
+      });
+    } else {
+      return NextResponse.json({
+        status: 'warning',
+        message: 'Webhook 端点正常，但数据库连接失败！'
+      }, { status: 200 });
+    }
+  } catch (error) {
+    console.error('测试数据库连接时出错:', error);
+    return NextResponse.json({
+      status: 'error',
+      message: 'Webhook 端点正常，但数据库测试失败！',
+      error: String(error)
+    }, { status: 200 });
+  }
+}
 
 export async function POST(request: Request) {
   try {
-    // Get the raw request body for signature verification
+    // 获取原始请求体用于签名验证
     const body = await request.text();
     const jsonBody = JSON.parse(body);
     
-    // Get the Creem signature from headers
+    // 获取 Creem 签名
     const signature = request.headers.get('creem-signature');
     
-    // Verify the signature in a real implementation
-    // if (signature) {
-    //   const isValid = verifySignature(body, signature, WEBHOOK_SECRET);
-    //   if (!isValid) {
-    //     console.error('Invalid signature');
-    //     return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
-    //   }
-    // }
+    // 验证签名
+    let signatureValid = true;
+    if (signature) {
+      try {
+        signatureValid = verifySignature(body, signature, WEBHOOK_SECRET);
+        if (!signatureValid) {
+          console.error('无效签名');
+          return NextResponse.json({ error: '无效签名' }, { status: 401 });
+        } else {
+          console.log('签名验证成功');
+        }
+      } catch (signatureError) {
+        console.error('签名验证失败:', signatureError);
+        // 在测试阶段，我们继续处理，但在生产环境中，你可能想在这里返回错误
+      }
+    } else {
+      console.log('没有提供签名');
+    }
     
-    // Handle different event types
+    // 处理不同的事件类型
     const eventType = jsonBody.eventType;
     
-    console.log('Webhook received:', {
+    console.log('Webhook 收到:', {
       eventType,
       id: jsonBody.id,
       created_at: jsonBody.created_at,
-      object: jsonBody.object
+      object: jsonBody.object ? {
+        id: jsonBody.object.id,
+        type: jsonBody.object.object,
+      } : null
     });
     
-    // Process the webhook based on the event type
+    // 根据事件类型处理 webhook
     switch (eventType) {
       case 'checkout.completed':
         await handleCheckoutCompleted(jsonBody);
@@ -45,69 +86,159 @@ export async function POST(request: Request) {
         await handleSubscriptionPaid(jsonBody);
         break;
       default:
-        console.log(`Unhandled event type: ${eventType}`);
+        console.log(`未处理的事件类型: ${eventType}`);
     }
     
-    return NextResponse.json({ received: true });
+    return NextResponse.json({ received: true, status: 'success' });
   } catch (error) {
-    console.error('Webhook error:', error);
+    console.error('Webhook 处理错误:', error);
     return NextResponse.json(
-      { error: 'Webhook processing failed' },
+      { error: 'Webhook 处理失败', details: String(error) },
       { status: 500 }
     );
   }
 }
 
-// Function to verify the signature
+// 验证签名函数
 function verifySignature(payload: string, signature: string, secret: string): boolean {
-  const computedSignature = crypto
-    .createHmac('sha256', secret)
-    .update(payload)
-    .digest('hex');
-  return crypto.timingSafeEqual(
-    Buffer.from(computedSignature),
-    Buffer.from(signature)
-  );
+  try {
+    const computedSignature = crypto
+      .createHmac('sha256', secret)
+      .update(payload)
+      .digest('hex');
+    
+    // 安全比较两个签名
+    return crypto.timingSafeEqual(
+      Buffer.from(computedSignature),
+      Buffer.from(signature)
+    );
+  } catch (error) {
+    console.error('验证签名时出错:', error);
+    return false;
+  }
 }
 
-// Handle checkout.completed event
+// 处理 checkout.completed 事件
 async function handleCheckoutCompleted(event: any) {
-  console.log('Payment successful!', {
-    checkoutId: event.object.id,
-    customerId: event.object.customer?.id,
-    productId: event.object.product?.id,
-    amount: event.object.amount,
-    metadata: event.object.metadata
-  });
-  
-  // Here you would update your database
-  // For example:
-  // await db.users.update({
-  //   where: { id: event.object.metadata.userId },
-  //   data: { hasPaid: true, subscriptionId: event.object.subscription?.id }
-  // });
+  try {
+    console.log('支付成功!', {
+      checkoutId: event.object.id,
+      customerId: event.object.customer?.id,
+      productId: event.object.product?.id,
+      amount: event.object.amount,
+      metadata: event.object.metadata
+    });
+    
+    // 从事件中提取需要的数据
+    const amount = event.object.amount ? parseFloat(event.object.amount) / 100 : 6.9; // 假设金额可能以分为单位
+    const productId = event.object.product?.id ? parseInt(event.object.product.id.replace(/\D/g, ''), 10) : 1;
+    const transactionId = event.object.id || event.id;
+    let userId = '3'; // 默认用户ID
+    
+    // 如果有元数据，尝试从中提取用户ID
+    if (event.object.metadata && event.object.metadata.userId) {
+      userId = event.object.metadata.userId;
+    }
+    
+    // 插入支付记录到数据库
+    await insertPayment({
+      user_id: userId,
+      plan_id: productId,
+      amount: amount,
+      payment_method: 'creem',
+      transaction_id: transactionId,
+      status: 1, // 成功
+    });
+    
+    console.log(`支付记录已成功添加到数据库，用户ID: ${userId}, 金额: ${amount}`);
+  } catch (error) {
+    console.error('处理支付完成事件时出错:', error);
+    throw error;
+  }
 }
 
-// Handle subscription.active event
+// 处理 subscription.active 事件
 async function handleSubscriptionActive(event: any) {
-  console.log('Subscription is now active!', {
-    subscriptionId: event.object.id,
-    customerId: event.object.customer?.id,
-    productId: event.object.product?.id,
-    metadata: event.object.metadata
-  });
-  
-  // Here you would update your database to mark the subscription as active
+  try {
+    console.log('订阅已激活!', {
+      subscriptionId: event.object.id,
+      customerId: event.object.customer?.id,
+      productId: event.object.product?.id,
+      metadata: event.object.metadata
+    });
+    
+    // 从事件中提取数据
+    const productId = event.object.product?.id ? parseInt(event.object.product.id.replace(/\D/g, ''), 10) : 1;
+    const transactionId = event.object.id || event.id;
+    let userId = '3'; // 默认用户ID
+    let amount = 6.9; // 默认金额
+    
+    // 如果有元数据，尝试从中提取用户ID
+    if (event.object.metadata && event.object.metadata.userId) {
+      userId = event.object.metadata.userId;
+    }
+    
+    // 如果能获取到产品价格，使用产品价格
+    if (event.object.product && event.object.product.price) {
+      amount = parseFloat(event.object.product.price) / 100;
+    }
+    
+    // 插入支付记录到数据库
+    await insertPayment({
+      user_id: userId,
+      plan_id: productId,
+      amount: amount,
+      payment_method: 'creem_subscription',
+      transaction_id: transactionId,
+      status: 1, // 成功
+    });
+    
+    console.log(`订阅记录已成功添加到数据库，用户ID: ${userId}, 产品ID: ${productId}`);
+  } catch (error) {
+    console.error('处理订阅激活事件时出错:', error);
+    throw error;
+  }
 }
 
-// Handle subscription.paid event
+// 处理 subscription.paid 事件
 async function handleSubscriptionPaid(event: any) {
-  console.log('Subscription payment received!', {
-    subscriptionId: event.object.id,
-    customerId: event.object.customer?.id,
-    productId: event.object.product?.id,
-    metadata: event.object.metadata
-  });
-  
-  // Here you would update your database to record the payment
+  try {
+    console.log('订阅付款已收到!', {
+      subscriptionId: event.object.id,
+      customerId: event.object.customer?.id,
+      productId: event.object.product?.id,
+      metadata: event.object.metadata
+    });
+    
+    // 从事件中提取数据
+    const productId = event.object.product?.id ? parseInt(event.object.product.id.replace(/\D/g, ''), 10) : 1;
+    const transactionId = `${event.object.id}_${Date.now()}` || event.id;
+    let userId = '3'; // 默认用户ID
+    let amount = 6.9; // 默认金额
+    
+    // 如果有元数据，尝试从中提取用户ID
+    if (event.object.metadata && event.object.metadata.userId) {
+      userId = event.object.metadata.userId;
+    }
+    
+    // 如果能获取到产品价格，使用产品价格
+    if (event.object.product && event.object.product.price) {
+      amount = parseFloat(event.object.product.price) / 100;
+    }
+    
+    // 插入支付记录到数据库
+    await insertPayment({
+      user_id: userId,
+      plan_id: productId,
+      amount: amount,
+      payment_method: 'creem_subscription_renewal',
+      transaction_id: transactionId,
+      status: 1, // 成功
+    });
+    
+    console.log(`订阅续费记录已成功添加到数据库，用户ID: ${userId}, 产品ID: ${productId}`);
+  } catch (error) {
+    console.error('处理订阅付款事件时出错:', error);
+    throw error;
+  }
 } 

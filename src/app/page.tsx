@@ -1,4 +1,5 @@
 import PricingPlan from '@/components/PricingPlan';
+import Link from 'next/link';
 
 export default function Home() {
   return (
@@ -13,7 +14,7 @@ export default function Home() {
         <p className="text-center text-gray-600 mb-4">
           This demo uses real Creem test API integration with webhooks
         </p>
-        <p className="text-center text-gray-500 mb-12 text-sm">
+        <p className="text-center text-gray-500 mb-6 text-sm">
           API Key: creem_test_2ZfiQdu1w6C29pbWZbmxki | Webhook URL: https://128821.vercel.app/api/webhooks
         </p>
         
@@ -21,7 +22,16 @@ export default function Home() {
           <PricingPlan />
         </div>
         
-        <div className="mt-12 text-center text-sm text-gray-500">
+        <div className="mt-12 text-center">
+          <Link 
+            href="/payments" 
+            className="inline-block bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded transition-colors"
+          >
+            查看支付记录
+          </Link>
+        </div>
+        
+        <div className="mt-6 text-center text-sm text-gray-500">
           <p>Check the browser console to see payment status logs</p>
           <p className="mt-2">
             Upon successful payment, webhooks will be received at the webhook URL,

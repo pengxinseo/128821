@@ -1,11 +1,22 @@
 import { NextResponse } from 'next/server';
 
-// This is using the real Creem API with test mode
+// 使用带测试模式的真实 Creem API
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     
-    // Use real Creem API with test API key
+    // 确保有用户ID
+    const userId = body.userId || '3';
+    
+    // 从请求中提取元数据
+    const metadata = body.metadata || {};
+    
+    // 确保元数据中包含用户ID
+    if (!metadata.userId) {
+      metadata.userId = userId;
+    }
+    
+    // 使用真实的 Creem API 并带测试 API 密钥
     const response = await fetch('https://test-api.creem.io/v1/checkouts', {
       method: 'POST',
       headers: {
@@ -17,20 +28,22 @@ export async function POST(request: Request) {
         request_id: body.request_id,
         success_url: body.success_url,
         metadata: {
-          userId: body.userId || 'user_123',
-          orderId: body.orderId || `order_${Date.now()}`
+          ...metadata,
+          userId: userId,
+          orderId: body.orderId || `order_${Date.now()}`,
+          appSource: 'next-creem-demo'
         }
       })
     });
     
     const responseData = await response.json();
-    console.log('Checkout session created:', responseData);
+    console.log('结账会话已创建:', responseData);
     
     return NextResponse.json(responseData);
   } catch (error) {
-    console.error('Checkout error:', error);
+    console.error('结账错误:', error);
     return NextResponse.json(
-      { error: 'Failed to create checkout session' },
+      { error: '创建结账会话失败', details: String(error) },
       { status: 500 }
     );
   }
