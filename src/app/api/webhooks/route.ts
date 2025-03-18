@@ -121,18 +121,45 @@ function verifySignature(payload: string, signature: string, secret: string): bo
 // 处理 checkout.completed 事件
 async function handleCheckoutCompleted(event: any) {
   try {
-    console.log('支付成功!', {
+    console.log('支付成功! 详细信息:', JSON.stringify({
       checkoutId: event.object.id,
       customerId: event.object.customer?.id,
       productId: event.object.product?.id,
-      amount: event.object.amount,
+      amount: event.object.amount || event.object.order?.amount,
       metadata: event.object.metadata
-    });
+    }, null, 2));
     
     // 从事件中提取需要的数据
-    const amount = event.object.amount ? parseFloat(event.object.amount) / 100 : 6.9; // 假设金额可能以分为单位
-    const productId = event.object.product?.id ? parseInt(event.object.product.id.replace(/\D/g, ''), 10) : 1;
+    let amount = 6.9; // 默认金额
+    
+    // 尝试从不同位置获取金额
+    if (event.object.amount) {
+      amount = parseFloat(event.object.amount) / 100;
+    } else if (event.object.order && event.object.order.amount) {
+      amount = parseFloat(event.object.order.amount) / 100;
+    } else if (event.object.product && event.object.product.price) {
+      amount = parseFloat(event.object.product.price) / 100;
+    }
+    
+    console.log(`解析的金额: ${amount}`);
+    
+    // 获取产品ID
+    let productId = 1; // 默认产品ID
+    if (event.object.product && event.object.product.id) {
+      const productIdMatch = event.object.product.id.match(/\d+/);
+      if (productIdMatch) {
+        productId = parseInt(productIdMatch[0], 10);
+      } else {
+        productId = 5; // 如果无法解析，使用5作为默认值
+      }
+    }
+    
+    console.log(`解析的产品ID: ${productId}`);
+    
+    // 获取交易ID
     const transactionId = event.object.id || event.id;
+    
+    // 获取用户ID
     let userId = '3'; // 默认用户ID
     
     // 如果有元数据，尝试从中提取用户ID
@@ -140,17 +167,32 @@ async function handleCheckoutCompleted(event: any) {
       userId = event.object.metadata.userId;
     }
     
-    // 插入支付记录到数据库
-    await insertPayment({
-      user_id: userId,
-      plan_id: productId,
-      amount: amount,
-      payment_method: 'creem',
-      transaction_id: transactionId,
-      status: 1, // 成功
-    });
+    console.log(`使用的用户ID: ${userId}`);
     
-    console.log(`支付记录已成功添加到数据库，用户ID: ${userId}, 金额: ${amount}`);
+    // 测试数据库连接
+    const testResult = await testConnection();
+    console.log(`数据库连接测试结果: ${testResult ? '成功' : '失败'}`);
+    
+    if (!testResult) {
+      throw new Error('数据库连接失败');
+    }
+    
+    // 插入支付记录到数据库
+    try {
+      const result = await insertPayment({
+        user_id: userId,
+        plan_id: productId,
+        amount: amount,
+        payment_method: 'creem',
+        transaction_id: transactionId,
+        status: 1, // 成功
+      });
+      
+      console.log(`支付记录已成功添加到数据库，用户ID: ${userId}, 金额: ${amount}, 结果:`, result);
+    } catch (dbError) {
+      console.error('插入支付记录时出错:', dbError);
+      throw dbError;
+    }
   } catch (error) {
     console.error('处理支付完成事件时出错:', error);
     throw error;

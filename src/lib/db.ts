@@ -35,7 +35,7 @@ export async function query(sql: string, params: any[] = []) {
   }
 }
 
-// 插入支付记录
+// 插入支付记录 - 修改为使用 iuu_payment 表
 export async function insertPayment({
   user_id,
   plan_id,
@@ -52,7 +52,7 @@ export async function insertPayment({
   status?: number;
 }) {
   const sql = `
-    INSERT INTO payments 
+    INSERT INTO iuu_payment 
     (user_id, plan_id, amount, payment_method, transaction_id, status, payment_date) 
     VALUES (?, ?, ?, ?, ?, ?, NOW())
   `;

@@ -7,7 +7,7 @@ interface Payment {
   id: number;
   user_id: string;
   plan_id: number;
-  amount: number;
+  amount: number | string;
   payment_method: string;
   transaction_id: string;
   status: number;
@@ -26,13 +26,15 @@ export default function PaymentsPage() {
         const data = await response.json();
         
         if (data.success) {
+          console.log('获取到支付记录:', data.data);
           setPayments(data.data);
         } else {
+          console.error('获取支付记录失败:', data.error);
           setError(data.error || '获取支付记录失败');
         }
       } catch (err) {
-        setError('获取支付记录时发生错误');
         console.error('获取支付记录时出错:', err);
+        setError('获取支付记录时发生错误');
       } finally {
         setLoading(false);
       }
@@ -53,8 +55,26 @@ export default function PaymentsPage() {
 
   // 格式化日期
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleString('zh-CN');
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleString('zh-CN');
+    } catch (e) {
+      return dateString || '未知日期';
+    }
+  };
+
+  // 格式化金额
+  const formatAmount = (amount: number | string) => {
+    if (typeof amount === 'number') {
+      return `$${amount.toFixed(2)}`;
+    }
+    if (typeof amount === 'string') {
+      const numAmount = parseFloat(amount);
+      if (!isNaN(numAmount)) {
+        return `$${numAmount.toFixed(2)}`;
+      }
+    }
+    return `$${amount}`;
   };
 
   return (
@@ -99,13 +119,17 @@ export default function PaymentsPage() {
                 {payments.map((payment) => (
                   <tr key={payment.id} className="hover:bg-gray-50">
                     <td className="py-3 px-4 whitespace-nowrap">{payment.id}</td>
-                    <td className="py-3 px-4 whitespace-nowrap">{payment.user_id}</td>
+                    <td className="py-3 px-4 whitespace-nowrap">
+                      <span className="truncate block max-w-[150px]" title={payment.user_id}>
+                        {payment.user_id}
+                      </span>
+                    </td>
                     <td className="py-3 px-4 whitespace-nowrap">{payment.plan_id}</td>
-                    <td className="py-3 px-4 whitespace-nowrap">${payment.amount.toFixed(2)}</td>
-                    <td className="py-3 px-4 whitespace-nowrap">{payment.payment_method}</td>
+                    <td className="py-3 px-4 whitespace-nowrap">{formatAmount(payment.amount)}</td>
+                    <td className="py-3 px-4 whitespace-nowrap">{payment.payment_method || '未知'}</td>
                     <td className="py-3 px-4 whitespace-nowrap">
                       <span className="truncate block max-w-[150px]" title={payment.transaction_id}>
-                        {payment.transaction_id}
+                        {payment.transaction_id || '无'}
                       </span>
                     </td>
                     <td className="py-3 px-4 whitespace-nowrap">
