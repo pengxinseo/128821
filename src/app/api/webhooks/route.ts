@@ -137,11 +137,7 @@ export async function GET(request: Request) {
 // 正确验证Creem的签名
 function verifySignature(body: string, signature: string): boolean {
   try {
-    // 在测试模式下，暂时允许所有请求通过（便于调试）
-    if (config.creem.testMode) {
-      console.log('测试模式下跳过签名验证');
-      return true;
-    }
+ 
 
     if (!signature) {
       console.log('未提供签名');
